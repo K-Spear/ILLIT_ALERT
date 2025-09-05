@@ -1,0 +1,5 @@
+{
+  "name": "Binance Position Alerter",
+  "description": "Monitors a Binance user's leaderboard for new or closed futures positions and provides real-time audio and visual alerts.",
+  "requestFramePermissions": []
+}
