@@ -8,7 +8,8 @@ import { LogPanel } from './components/LogPanel';
 import { LoginScreen } from './components/LoginScreen';
 import { useLanguage } from './LanguageContext';
 
-const POLLING_INTERVAL = 5000; // 5 seconds
+// Randomized polling intervals in milliseconds
+const POLLING_INTERVALS_MS = [5000, 15000, 31000, 47000, 60000];
 
 function App() {
   const { t } = useLanguage();
@@ -18,9 +19,10 @@ function App() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [highlightedSymbols, setHighlightedSymbols] = useState<Set<string>>(new Set());
-  // FIX: Use ReturnType<typeof setInterval> for better portability between Node.js and browser environments.
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previousPositionsRef = useRef<Map<string, Position>>(new Map());
+  const monitoringStartedRef = useRef(false); // Ref to track if monitoring has ever started
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -28,76 +30,94 @@ function App() {
   };
 
   const stopMonitoring = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     setIsMonitoring(false);
-    addLog('Monitoring stopped.');
+    // Only log "stopped" if it was actually started before
+    if (monitoringStartedRef.current) {
+        addLog(t('log_monitoring_stopped'));
+        monitoringStartedRef.current = false;
+    }
   };
 
-  const startMonitoring = async () => {
+  const checkPositions = async () => {
+    // This function is now part of a recursive loop, it should not check for UID itself.
+    try {
+      addLog(t('log_fetching_data'));
+      const newPositions = await fetchUserPositions(encryptedUid);
+
+      const currentPositionsMap = new Map<string, Position>();
+      newPositions.forEach(p => currentPositionsMap.set(p.symbol, p));
+
+      const newHighlights = new Set<string>();
+
+      // Check for new positions
+      for (const position of newPositions) {
+        if (!previousPositionsRef.current.has(position.symbol)) {
+          addLog(`${t('log_new_position')} ${position.symbol} (${position.side})`);
+          newHighlights.add(position.symbol);
+        }
+      }
+      
+      // Check for closed positions
+      for (const symbol of previousPositionsRef.current.keys()) {
+          if (!currentPositionsMap.has(symbol)) {
+              addLog(`${t('log_closed_position')} ${symbol}`);
+          }
+      }
+
+      setPositions(newPositions);
+      setHighlightedSymbols(newHighlights);
+      previousPositionsRef.current = currentPositionsMap;
+
+      addLog(t('log_fetch_success', { count: newPositions.length }));
+
+    } catch (error) {
+      let errorMessage = t('log_error_unknown');
+      if (error instanceof Error) {
+          errorMessage = error.message;
+      }
+      addLog(`${t('log_error_fetching')} ${errorMessage}`);
+      stopMonitoring();
+    } finally {
+        // Schedule the next check with a random interval if we are still supposed to be monitoring
+        if (isMonitoring && timeoutRef.current !== null) {
+            const randomInterval = POLLING_INTERVALS_MS[Math.floor(Math.random() * POLLING_INTERVALS_MS.length)];
+            addLog(`${t('log_next_check_in')} ${randomInterval / 1000}${t('log_seconds_suffix')}`);
+            timeoutRef.current = setTimeout(checkPositions, randomInterval);
+        }
+    }
+  };
+
+  const startMonitoring = () => {
     if (!encryptedUid.trim()) {
-      addLog('Error: Encrypted UID is required.');
+      addLog(t('log_error_uid_required'));
       return;
     }
-
-    addLog(`Starting monitoring for UID: ${encryptedUid}`);
+    // Clear previous timeout if any
+    if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+    }
+    
+    addLog(`${t('log_monitoring_started_for')} ${encryptedUid}`);
     setIsMonitoring(true);
+    monitoringStartedRef.current = true;
     previousPositionsRef.current.clear();
     setPositions([]);
     setHighlightedSymbols(new Set());
     
-    const fetchData = async () => {
-      try {
-        addLog('Fetching position data...');
-        const newPositions = await fetchUserPositions(encryptedUid);
-
-        const currentPositionsMap = new Map<string, Position>();
-        newPositions.forEach(p => currentPositionsMap.set(p.symbol, p));
-
-        const newHighlights = new Set<string>();
-
-        // Check for new positions
-        for (const position of newPositions) {
-          if (!previousPositionsRef.current.has(position.symbol)) {
-            addLog(`New position opened: ${position.symbol} (${position.side})`);
-            newHighlights.add(position.symbol);
-          }
-        }
-        
-        // Check for closed positions
-        for (const symbol of previousPositionsRef.current.keys()) {
-            if (!currentPositionsMap.has(symbol)) {
-                addLog(`Position closed: ${symbol}`);
-            }
-        }
-
-        setPositions(newPositions);
-        setHighlightedSymbols(newHighlights);
-        previousPositionsRef.current = currentPositionsMap;
-
-        addLog(`Successfully fetched ${newPositions.length} positions.`);
-
-      } catch (error) {
-        let errorMessage = 'An unknown error occurred';
-        if (error instanceof Error) {
-            errorMessage = error.message;
-        }
-        addLog(`Error fetching data: ${errorMessage}`);
-        stopMonitoring();
-      }
-    };
-
-    await fetchData(); // Initial fetch
-    intervalRef.current = setInterval(fetchData, POLLING_INTERVAL);
+    // Set a flag that allows the recursive loop to start
+    timeoutRef.current = setTimeout(() => {}, 0); 
+    checkPositions(); // Start the first check immediately
   };
   
   useEffect(() => {
     return () => {
       // Cleanup on unmount
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, []);

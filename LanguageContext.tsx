@@ -23,9 +23,22 @@ const translations = {
     log_panel_title: 'Activity Log',
     log_panel_placeholder: 'Logs will appear here...',
     login_title: 'Binance Futures Leaderboard Tracker',
-    login_disclaimer_title: 'Disclaimer:',
-    login_disclaimer_text: 'This is a third-party tool and is not affiliated with Binance. Use at your own risk.',
-    login_button: 'Agree & Continue'
+    login_disclaimer_title: 'Developer Note:',
+    login_disclaimer_text: 'This app bypasses browser restrictions by using a local backend server to fetch real data. Please ensure you have followed the README instructions to install and run the server before proceeding.',
+    login_button: 'Agree & Continue',
+    
+    // New / Updated Logs
+    log_monitoring_stopped: 'Monitoring stopped.',
+    log_error_uid_required: 'Error: Encrypted UID is required.',
+    log_monitoring_started_for: 'Starting monitoring for UID:',
+    log_fetching_data: 'Fetching position data...',
+    log_new_position: 'New position opened:',
+    log_closed_position: 'Position closed:',
+    log_fetch_success: 'Successfully fetched {{count}} position(s).',
+    log_error_fetching: 'Error fetching data:',
+    log_error_unknown: 'An unknown error occurred.',
+    log_next_check_in: 'Next check in',
+    log_seconds_suffix: 's',
   },
   ko: {
     header_title: '바이낸스 포지션 모니터',
@@ -47,27 +60,48 @@ const translations = {
     log_panel_title: '활동 로그',
     log_panel_placeholder: '로그가 여기에 표시됩니다...',
     login_title: '바이낸스 선물 리더보드 트래커',
-    login_disclaimer_title: '면책 조항:',
-    login_disclaimer_text: '이것은 제3자 도구이며 바이낸스와 관련이 없습니다. 자신의 책임하에 사용하십시오.',
-    login_button: '동의 및 계속'
+    login_disclaimer_title: '개발자 참고:',
+    login_disclaimer_text: '이 앱은 브라우저의 제약을 우회하기 위해 로컬 백엔드 서버를 사용하여 실제 데이터를 가져옵니다. 계속하기 전에 README 안내에 따라 서버를 설치하고 실행했는지 확인해주세요.',
+    login_button: '동의 및 계속',
+
+    // New / Updated Logs
+    log_monitoring_stopped: '모니터링이 중지되었습니다.',
+    log_error_uid_required: '오류: 암호화된 UID가 필요합니다.',
+    log_monitoring_started_for: 'UID에 대한 모니터링 시작:',
+    log_fetching_data: '포지션 데이터를 가져오는 중...',
+    log_new_position: '새 포지션 열림:',
+    log_closed_position: '포지션 종료됨:',
+    log_fetch_success: '{{count}}개의 포지션을 성공적으로 가져왔습니다.',
+    log_error_fetching: '데이터를 가져오는 중 오류 발생:',
+    log_error_unknown: '알 수 없는 오류가 발생했습니다.',
+    log_next_check_in: '다음 확인까지',
+    log_seconds_suffix: '초',
   }
 };
 
 type TranslationKey = keyof typeof translations.en;
+type TranslationParams = { [key: string]: string | number };
 
 interface LanguageContextType {
   language: Language;
   setLanguage: (language: Language) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey, params?: TranslationParams) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>('ko');
 
-  const t = (key: TranslationKey) => {
-    return translations[language][key] || key;
+  const t = (key: TranslationKey, params?: TranslationParams) => {
+    let translation = translations[language][key] || key;
+    if (params) {
+        Object.keys(params).forEach(paramKey => {
+            const regex = new RegExp(`{{${paramKey}}}`, 'g');
+            translation = translation.replace(regex, String(params[paramKey]));
+        });
+    }
+    return translation;
   };
 
   return (
