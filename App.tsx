@@ -1,151 +1,148 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import type { Position } from './types';
+import { fetchUserPositions } from './services/binanceService';
 import { Header } from './components/Header';
 import { ControlPanel } from './components/ControlPanel';
 import { PositionGrid } from './components/PositionGrid';
 import { LogPanel } from './components/LogPanel';
 import { LoginScreen } from './components/LoginScreen';
-import { fetchUserPositions } from './services/binanceService';
-import type { Position } from './types';
 import { useLanguage } from './LanguageContext';
 
-const POLLING_INTERVAL_MS = 5000; // 5 seconds
-const NOTIFICATION_SOUND_URL = 'https://actions.google.com/sounds/v1/alarms/notification_high_intensity.ogg';
+const POLLING_INTERVAL = 5000; // 5 seconds
 
-export default function App() {
+function App() {
+  const { t } = useLanguage();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [encryptedUid, setEncryptedUid] = useState('14EA12E7412DC5A21DFF5E7EAC6013B9');
+  const [encryptedUid, setEncryptedUid] = useState('');
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [positions, setPositions] = useState<Position[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
-  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
-  
+  const [highlightedSymbols, setHighlightedSymbols] = useState<Set<string>>(new Set());
+  // FIX: Use ReturnType<typeof setInterval> for better portability between Node.js and browser environments.
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previousPositionsRef = useRef<Map<string, Position>>(new Map());
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hasStartedMonitoring = useRef(false);
-  const { t } = useLanguage();
 
-  useEffect(() => {
-    audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
-  }, []);
-
-  const playNotification = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(error => console.error("Audio play failed:", error));
-    }
-  }, []);
-
-  const addLog = useCallback((message: string) => {
+  const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setLogs(prevLogs => [`[${timestamp}] ${message}`, ...prevLogs.slice(0, 99)]);
-  }, []);
+    setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 100)); // Keep last 100 logs
+  };
 
-  const checkPositions = useCallback(async () => {
-    try {
-      const newPositionsArray = await fetchUserPositions(encryptedUid);
-      const newPositionsMap = new Map(newPositionsArray.map(p => [p.symbol, p]));
-      const oldPositionsMap = previousPositionsRef.current;
-      const newHighlighted = new Set<string>();
-
-      // Check for new or modified positions
-      for (const [symbol, newPos] of newPositionsMap.entries()) {
-        if (!oldPositionsMap.has(symbol)) {
-          const message = `${t('log_new_position')} ${newPos.side} | ${symbol} | ${t('position_card_size_label')}: ${newPos.size}`;
-          addLog(message);
-          playNotification();
-          newHighlighted.add(symbol);
-        }
-      }
-
-      // Check for closed positions
-      for (const [symbol, oldPos] of oldPositionsMap.entries()) {
-        if (!newPositionsMap.has(symbol)) {
-          const message = `${t('log_closed_position')} ${oldPos.side} | ${symbol} | PNL: ${oldPos.pnl.toFixed(2)} USDT`;
-          addLog(message);
-          playNotification();
-        }
-      }
-
-      setPositions(newPositionsArray);
-      setHighlighted(newHighlighted);
-      previousPositionsRef.current = newPositionsMap;
-
-    } catch (error) {
-      console.error("Failed to fetch positions:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      addLog(`${t('log_error_fetching')} ${errorMessage}`);
-      setIsMonitoring(false);
+  const stopMonitoring = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-  }, [encryptedUid, addLog, playNotification, t]);
+    setIsMonitoring(false);
+    addLog('Monitoring stopped.');
+  };
 
-
-  useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    if (isMonitoring) {
-      hasStartedMonitoring.current = true;
-      addLog(t('log_monitoring_started'));
-      checkPositions(); // Initial check
-      intervalId = setInterval(checkPositions, POLLING_INTERVAL_MS);
-    } else {
-      if (hasStartedMonitoring.current) {
-        addLog(t('log_monitoring_stopped'));
-      }
+  const startMonitoring = async () => {
+    if (!encryptedUid.trim()) {
+      addLog('Error: Encrypted UID is required.');
+      return;
     }
+
+    addLog(`Starting monitoring for UID: ${encryptedUid}`);
+    setIsMonitoring(true);
+    previousPositionsRef.current.clear();
+    setPositions([]);
+    setHighlightedSymbols(new Set());
     
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+    const fetchData = async () => {
+      try {
+        addLog('Fetching position data...');
+        const newPositions = await fetchUserPositions(encryptedUid);
+
+        const currentPositionsMap = new Map<string, Position>();
+        newPositions.forEach(p => currentPositionsMap.set(p.symbol, p));
+
+        const newHighlights = new Set<string>();
+
+        // Check for new positions
+        for (const position of newPositions) {
+          if (!previousPositionsRef.current.has(position.symbol)) {
+            addLog(`New position opened: ${position.symbol} (${position.side})`);
+            newHighlights.add(position.symbol);
+          }
+        }
+        
+        // Check for closed positions
+        for (const symbol of previousPositionsRef.current.keys()) {
+            if (!currentPositionsMap.has(symbol)) {
+                addLog(`Position closed: ${symbol}`);
+            }
+        }
+
+        setPositions(newPositions);
+        setHighlightedSymbols(newHighlights);
+        previousPositionsRef.current = currentPositionsMap;
+
+        addLog(`Successfully fetched ${newPositions.length} positions.`);
+
+      } catch (error) {
+        let errorMessage = 'An unknown error occurred';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        addLog(`Error fetching data: ${errorMessage}`);
+        stopMonitoring();
       }
     };
-  }, [isMonitoring, addLog, checkPositions, t]);
 
-  const handleStart = () => {
-    if (encryptedUid.trim()) {
-      setIsMonitoring(true);
-      previousPositionsRef.current = new Map();
-      setPositions([]);
-    } else {
-        addLog(t('log_enter_uid'));
-    }
-  };
-
-  const handleStop = () => {
-    setIsMonitoring(false);
+    await fetchData(); // Initial fetch
+    intervalRef.current = setInterval(fetchData, POLLING_INTERVAL);
   };
   
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+  
+  const handleLogin = () => {
+      setIsLoggedIn(true);
+  };
+
   const handleLogout = () => {
-    setIsMonitoring(false);
-    setPositions([]);
-    setLogs([]);
-    previousPositionsRef.current.clear();
-    hasStartedMonitoring.current = false;
-    setIsLoggedIn(false);
+      stopMonitoring();
+      setIsLoggedIn(false);
+      setEncryptedUid('');
+      setPositions([]);
+      setLogs([]);
+      setHighlightedSymbols(new Set());
   };
 
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={() => setIsLoggedIn(true)} />;
+      return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-200 font-sans p-4 sm:p-6 lg:p-8">
+    <div className="bg-gray-900 text-gray-200 min-h-screen font-sans p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <Header onLogout={handleLogout} />
-        <ControlPanel
-          encryptedUid={encryptedUid}
-          setEncryptedUid={setEncryptedUid}
-          isMonitoring={isMonitoring}
-          onStart={handleStart}
-          onStop={handleStop}
-        />
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <PositionGrid positions={positions} highlightedSymbols={highlighted} />
+        <main className="space-y-6">
+          <ControlPanel
+            encryptedUid={encryptedUid}
+            setEncryptedUid={setEncryptedUid}
+            isMonitoring={isMonitoring}
+            onStart={startMonitoring}
+            onStop={stopMonitoring}
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <PositionGrid positions={positions} highlightedSymbols={highlightedSymbols} />
+            </div>
+            <div>
+              <LogPanel logs={logs} />
+            </div>
           </div>
-          <div>
-            <LogPanel logs={logs} />
-          </div>
-        </div>
+        </main>
       </div>
     </div>
   );
 }
+
+export default App;
