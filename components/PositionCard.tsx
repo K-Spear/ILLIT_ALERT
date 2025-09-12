@@ -15,6 +15,18 @@ const Stat: React.FC<{ label: string; value: string | React.ReactNode; className
     </div>
 );
 
+const LiveIndicator: React.FC = () => {
+    const { t } = useLanguage();
+    return (
+        <div className="flex items-center" title={t('position_card_live_indicator_tooltip')}>
+            <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+        </div>
+    );
+};
+
 export const PositionCard: React.FC<PositionCardProps> = ({ position, isNew }) => {
   const { t } = useLanguage();
   const isProfit = position.pnl >= 0;
@@ -35,14 +47,17 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, isNew }) =
         </div>
 
         <div className="mb-4">
-            <p className="text-xs text-gray-400">{t('position_card_pnl_label')}</p>
-            <p className={`text-2xl font-bold ${pnlColor}`}>{isProfit ? '+' : ''}{position.pnl.toFixed(2)}</p>
-            <p className={`text-sm font-semibold ${pnlColor}`}>{t('position_card_roe_label')} {position.roe.toFixed(2)}%</p>
+            <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-400">{t('position_card_pnl_label')}</p>
+                <LiveIndicator />
+            </div>
+            <p className={`text-2xl font-bold ${pnlColor} transition-colors duration-300 ease-in-out`}>{isProfit ? '+' : ''}{position.pnl.toFixed(2)}</p>
+            <p className={`text-sm font-semibold ${pnlColor} transition-colors duration-300 ease-in-out`}>{t('position_card_roe_label')} {position.roe.toFixed(2)}%</p>
         </div>
 
         <div className="space-y-1.5 text-gray-300">
             <Stat label={t('position_card_size_label')} value={position.size.toLocaleString()} />
-            <Stat label={t('position_card_mark_price_label')} value={position.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6})} />
+            <Stat label={t('position_card_mark_price_label')} value={<span className="transition-opacity duration-300 ease-in-out">{position.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6})}</span>} />
             <Stat label={t('position_card_entry_price_label')} value={position.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6})} />
         </div>
     </div>

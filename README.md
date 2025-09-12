@@ -2,51 +2,49 @@
 
 This application monitors a Binance user's leaderboard for new or closed futures positions and provides real-time audio and visual alerts.
 
-It uses a two-part architecture to fetch real data while respecting browser security policies.
-
--   **Frontend**: A React application that provides the user interface.
--   **Backend**: A Node.js server that scrapes the Binance leaderboard page to get live position data, bypassing browser CORS restrictions.
+It is a pure frontend application that runs entirely in your browser. It does not require a backend server. Instead, you manually provide the position data directly from the Binance website.
 
 ---
 
 ## 🚨 How to Run
 
-To run this application, you must start **both** the backend server and the frontend application.
+This is a pure frontend application. **No backend server is required.**
 
-### Step 1: Run the Backend Server
+1.  **Open the application:**
+    Simply open the `index.html` file in a modern web browser (like Chrome, Firefox, or Edge).
 
-The backend server is responsible for fetching the data from Binance.
-
-1.  **Navigate to the server directory:**
-    Open a terminal and change to the `server` directory.
-    ```bash
-    cd server
-    ```
-
-2.  **Install dependencies:**
-    You'll need to have Node.js installed. Run this command to install the required packages (`express`, `cors`, `axios`, `cheerio`).
-    ```bash
-    npm install
-    ```
-
-3.  **Start the server:**
-    Run the following command.
-    ```bash
-    node index.js
-    ```
-
-    You should see a message like `🚀 Server is running on http://localhost:3001`. Keep this terminal window open.
-
-### Step 2: Run the Frontend Application
-
-The frontend is what you see and interact with in your browser.
-
-1.  **Open a new terminal window.**
-    Do not close the terminal running the server.
-
-2.  **Run the frontend:**
-    You can run the frontend application using the provided development environment. The frontend will automatically connect to your backend server running on `localhost:3001`.
+That's it! The application is ready to use.
 
 ---
 
-Once both parts are running, you can open the application in your browser, log in (simulated), enter a Binance User Encrypted UID, and start monitoring.
+## ⚙️ How to Use
+
+The application works by processing position data that you copy from the Binance Futures leaderboard page.
+
+1.  **Open the Binance Leaderboard:**
+    Navigate to the Binance Futures leaderboard page of the user you want to monitor.
+
+2.  **Open Browser Developer Tools:**
+    Press `F12` or right-click on the page and select "Inspect" to open the developer tools.
+
+3.  **Find the Network Request:**
+    -   Go to the "Network" tab in the developer tools.
+    -   You might need to refresh the page (`F5`) to see the requests.
+    -   In the filter box, type `getOtherPosition`.
+
+4.  **Copy the Position Data:**
+    -   Click on the `getOtherPosition` request in the list.
+    -   A new panel will open. Go to the "**Response**" or "**Preview**" tab.
+    -   This will show you the position data in JSON format. Click the "Copy" button or manually select all the text and copy it.
+
+5.  **Paste into the App:**
+    -   Go back to the Position Alerter application.
+    -   Paste the copied JSON data into the large text area.
+
+6.  **Process Data:**
+    -   Click the "Process Data" button.
+    -   The app will display the current positions.
+
+7.  **Monitor for Changes:**
+    -   To check for updates, repeat steps 3-6.
+    -   The app will compare the new data with the previous data and log any new or closed positions.
