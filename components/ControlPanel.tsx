@@ -41,6 +41,10 @@ const HelpModal: React.FC<{onClose: () => void; bookmarkletCode: string;}> = ({ 
                         <h4 className="font-semibold text-yellow-400">{t('help_modal_step_3_title_bookmarklet')}</h4>
                         <p className="text-sm">{t('help_modal_step_3_text_bookmarklet')}</p>
                     </div>
+                     <div>
+                        <h4 className="font-semibold text-yellow-400">{t('help_modal_step_4_title_bookmarklet')}</h4>
+                        <p className="text-sm">{t('help_modal_step_4_text_bookmarklet')}</p>
+                    </div>
                 </div>
                 <div className="p-4 bg-gray-800/50 border-t border-gray-700 text-right rounded-b-lg">
                     <button onClick={onClose} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded-md transition">{t('help_modal_close_button')}</button>
@@ -67,7 +71,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Bookmarklet source code
   const bookmarkletJs = `
-  (function() {
+  (async function() {
     'use strict';
     
     function showToast(message, isError = false) {
@@ -91,38 +95,40 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         }, 3000);
     }
 
-    if (window.isBinanceDataCatcherInstalled) {
-        showToast('Data catcher is already active. Refresh page to get data.');
-        return;
-    }
-    window.isBinanceDataCatcherInstalled = true;
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const encryptedUid = urlParams.get('encryptedUid');
 
-    const originalFetch = window.fetch;
-    window.fetch = function(...args) {
-        const url = args[0] instanceof Request ? args[0].url : (typeof args[0] === 'string' ? args[0] : '');
-        
-        const promise = originalFetch.apply(this, args);
-
-        if (url.includes('/bapi/futures/v1/public/future/leaderboard/getOtherPosition')) {
-            promise.then(response => {
-                const clonedResponse = response.clone();
-                clonedResponse.json().then(data => {
-                    const jsonString = JSON.stringify(data, null, 2);
-                    navigator.clipboard.writeText(jsonString).then(() => {
-                        showToast('✅ ${t('bookmarklet_toast_success')}');
-                    }).catch(err => {
-                        showToast('❌ ${t('bookmarklet_toast_error')}', true);
-                        console.error('Bookmarklet copy error:', err);
-                    });
-                }).catch(err => console.error('Error parsing JSON from response:', err));
-            }).catch(err => console.error('Error fetching response:', err));
+        if (!encryptedUid) {
+            showToast('${t('bookmarklet_toast_uid_not_found')}', true);
+            return;
         }
-        
-        return promise;
-    };
 
-    showToast('${t('bookmarklet_toast_installed')}');
-    
+        const response = await fetch('https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPosition', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                encryptedUid: encryptedUid,
+                tradeType: "PERPETUAL"
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('API request failed: ' + response.statusText);
+        }
+
+        const data = await response.json();
+        const jsonString = JSON.stringify(data, null, 2);
+
+        await navigator.clipboard.writeText(jsonString);
+        showToast('${t('bookmarklet_toast_success')}');
+
+    } catch (error) {
+        showToast('${t('bookmarklet_toast_error')}', true);
+        console.error('Bookmarklet error:', error);
+    }
   })();
   `.replace(/\s+/g, ' '); // Minify the JS code
 
